@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: white !important;
+  -webkit-box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.05) inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  background-color: transparent;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.prose th {
+  background-color: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+}
+
+.prose tr:nth-child(even) td {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.prose tr:nth-child(odd) td {
+  background-color: transparent;
+}
+.prose pre {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.prose code {
+  background-color: transparent !important;
+}
