@@ -216,7 +216,7 @@ export default function Login() {
               <LogIn className="h-6 w-6 text-blue-400" />
             </div>
             <h2 className="mt-4 text-center text-2xl sm:text-3xl font-extrabold text-white">
-              {authMode === 'password' && 'Sign in to AI Assistant'}
+              {authMode === 'password' && 'Sign in to Nebula'}
               {authMode === 'otp' && 'Login with One-Time Code'}
               {authMode === 'forgot' && 'Reset Your Password'}
             </h2>

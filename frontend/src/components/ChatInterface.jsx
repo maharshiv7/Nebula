@@ -605,7 +605,7 @@ export default function ChatInterface() {
         <div className={`p-4 flex items-center ${isSidebarCollapsed ? 'justify-center px-2 border-b-0' : 'justify-between border-b border-gray-800'}`}>
           {!isSidebarCollapsed && (
             <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent truncate">
-              AI Assistant
+              Nebula
             </h1>
           )}
           <div className="flex items-center gap-1">
@@ -829,7 +829,7 @@ export default function ChatInterface() {
             <Menu size={20} />
           </button>
           <h1 className="text-sm font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-            AI Assistant
+            NEBULA
           </h1>
           <button
             type="button"
