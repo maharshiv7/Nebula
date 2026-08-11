@@ -5,6 +5,7 @@ import { GoogleLogin } from '@react-oauth/google';
 import Galaxy from './effects/Galaxy';
 import { apiFetch } from '../utils/api';
 import { API_URL } from '../utils/config';
+import InlineAlert from './InlineAlert';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -210,7 +211,7 @@ export default function Login() {
         />
       </div>
       <div className="relative z-10 flex items-center justify-center min-h-screen py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-6 bg-white/10 backdrop-blur-xl border border-white/20 p-6 sm:p-10 rounded-xl shadow-lg">
+        <div className="max-w-md w-full space-y-6 bg-white/10 backdrop-blur-xl border border-white/20 p-6 sm:p-10 rounded-2xl shadow-xl">
           <div>
             <div className="mx-auto h-12 w-12 bg-blue-100/20 border border-blue-500/30 rounded-full flex items-center justify-center">
               <LogIn className="h-6 w-6 text-blue-400" />
@@ -246,12 +247,8 @@ export default function Login() {
             </>
           )}
 
-          {error && (
-            <div className="text-red-400 text-sm text-center bg-red-950/60 border border-red-900/80 p-2.5 rounded-lg">
-              {error}
-            </div>
-          )}
-          {message && <div className="text-blue-300 text-sm text-center bg-blue-950/60 border border-blue-900/80 p-2.5 rounded-lg">{message}</div>}
+          {error && <InlineAlert severity="error">{error}</InlineAlert>}
+          {message && <div className="text-blue-300 text-sm text-center bg-blue-950/60 border border-blue-900/80 p-3 rounded-xl backdrop-blur-md">{message}</div>}
 
           {/* MODE 1: Standard Password Login */}
           {authMode === 'password' && (

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { LogOut, Send, Bot, User as UserIcon, MessageSquare, Plus, Image as ImageIcon, FileText, Paperclip, X, Pencil, Zap, PanelLeftClose, PanelLeftOpen, Copy, Check, RefreshCw, Menu, ChevronDown, Settings as SettingsIcon, Lock } from 'lucide-react';
+import { LogOut, Send, Sparkles, User as UserIcon, MessageSquare, Plus, Image as ImageIcon, FileText, Paperclip, X, Pencil, Zap, PanelLeftClose, PanelLeftOpen, Copy, Check, RefreshCw, Menu, ChevronDown, Settings as SettingsIcon, Lock } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 import TransparencyPanel from './TransparencyPanel';
 import ReactMarkdown from 'react-markdown';
 import Orb from './effects/Orb';
 import Settings from './Settings';
+import InlineAlert from './InlineAlert';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
@@ -13,26 +14,48 @@ import { apiFetch } from '../utils/api';
 import { API_URL } from '../utils/config';
 
 
-const GREETINGS = [
-  "What's on your mind?",
-  "Ready when you are.",
-  "What can I help you figure out?",
-  "Let's get started.",
-  "What are we working on?",
-  "Ask me anything."
+const getGreetingsPool = (name) => [
+  `What's on your mind, ${name}?`,
+  `Ready when you are, ${name}.`,
+  `What can I help you figure out, ${name}?`,
+  `Good to see you, ${name} - what are we working on?`,
+  `Hey ${name}, what's up?`,
+  `What's on the agenda, ${name}?`,
+  `Here whenever you need me, ${name}.`,
+  `What's the plan, ${name}?`,
+  `Ready to dive in, ${name}?`,
+  `What's brewing, ${name}?`,
+  `Let's talk it through, ${name}.`,
+  `${name}, ask me anything.`
 ];
 
 export default function ChatInterface() {
   const { chatId } = useParams();
   const navigate = useNavigate();
 
+  const user = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user'));
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
+  const firstName = useMemo(() => {
+    return user?.name ? user.name.trim().split(' ')[0] : 'there';
+  }, [user]);
+
   const randomGreeting = useMemo(() => {
-    return GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
-  }, [chatId]);
+    const pool = getGreetingsPool(firstName);
+    return pool[Math.floor(Math.random() * pool.length)];
+  }, [chatId, firstName]);
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState(null);
+  const [tierAnim, setTierAnim] = useState(false);
   const [statusMessage, setStatusMessage] = useState(''); // E.g. "thinking..."
   const [chatHistory, setChatHistory] = useState([]);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
@@ -75,7 +98,6 @@ export default function ChatInterface() {
   const imageInputRef = useRef(null);
   const documentInputRef = useRef(null);
   const skipNextFetchRef = useRef(false); // true right after we create a new chat locally
-  const user = JSON.parse(localStorage.getItem('user'));
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -178,6 +200,7 @@ export default function ChatInterface() {
   useEffect(() => {
     if (!chatId) {
       setMessages([]);
+      setIsMessagesLoading(false);
       return;
     }
 
@@ -190,6 +213,7 @@ export default function ChatInterface() {
     }
 
     const fetchMessages = async () => {
+      setIsMessagesLoading(true);
       try {
         const res = await apiFetch(`${API_URL}/api/chat/${chatId}/messages`);
         if (res.ok) {
@@ -200,6 +224,8 @@ export default function ChatInterface() {
         }
       } catch (err) {
         console.error('Error fetching messages:', err);
+      } finally {
+        setIsMessagesLoading(false);
       }
     };
 
@@ -317,6 +343,13 @@ export default function ChatInterface() {
     }).catch(err => {
       console.error('Failed to copy message:', err);
     });
+  };
+
+  const handleSelectTier = (tier) => {
+    setSelectedTier(tier);
+    setShowTierMenu(false);
+    setTierAnim(true);
+    setTimeout(() => setTierAnim(false), 300);
   };
 
   const handleRegenerateResponse = async (assistantIdx) => {
@@ -437,6 +470,7 @@ export default function ChatInterface() {
                   navigate(`/chat/${data.chatId}`, { replace: true });
                 }
                 assistantMsgId = Date.now() + 1;
+                setStreamingMessageId(assistantMsgId);
                 setMessages(prev => [
                   ...prev.filter(msg => msg._id !== tempUserId),
                   data.userMessage,
@@ -450,6 +484,7 @@ export default function ChatInterface() {
               }
               else if (data.type === 'token') {
                 setStatusMessage('');
+                if (assistantMsgId) setStreamingMessageId(assistantMsgId);
                 currentAssistantText += data.content;
                 setMessages(prev =>
                   prev.map(msg =>
@@ -500,18 +535,19 @@ export default function ChatInterface() {
               }
               else if (data.type === 'error') {
                 setStatusMessage('');
+                setStreamingMessageId(null);
                 const friendlyMsg = humanizeErrorMessage(data.content);
-                currentAssistantText += `\n\n⚠️ ${friendlyMsg}`;
                 setMessages(prev =>
                   prev.map(msg =>
                     msg._id === assistantMsgId
-                      ? { ...msg, content: currentAssistantText }
+                      ? { ...msg, content: friendlyMsg, isError: true }
                       : msg
                   )
                 );
               }
               else if (data.type === 'done') {
                 setStatusMessage('');
+                setStreamingMessageId(null);
               }
             } catch (err) {
               // Ignore partial JSON parse errors
@@ -526,6 +562,7 @@ export default function ChatInterface() {
     } finally {
       setIsLoading(false);
       setStatusMessage('');
+      setStreamingMessageId(null);
     }
   };
 
@@ -574,7 +611,7 @@ export default function ChatInterface() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-950 font-sans">
+    <div className="flex h-screen bg-black font-sans">
       {/* Hidden File Inputs */}
       <input
         type="file"
@@ -595,16 +632,16 @@ export default function ChatInterface() {
       {isMobileSidebarOpen && (
         <div
           onClick={() => setIsMobileSidebarOpen(false)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden"
+          className="fixed inset-0 bg-black/80 backdrop-blur-xs z-40 md:hidden"
         />
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 ${isSidebarCollapsed ? 'w-16 bg-transparent' : 'w-64 bg-gray-900'} transition-all duration-300 ease-in-out text-white flex flex-col overflow-hidden shrink-0 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:z-auto`}>
+      <div className={`fixed inset-y-0 left-0 z-50 ${isSidebarCollapsed ? 'w-16 bg-black/90 border-r border-neutral-800/80' : 'w-64 bg-black/95 border-r border-neutral-800/80'} transition-all duration-300 ease-in-out text-white flex flex-col overflow-hidden shrink-0 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:z-auto`}>
         {/* Sidebar Header with Toggle & Mobile Close Button */}
-        <div className={`p-4 flex items-center ${isSidebarCollapsed ? 'justify-center px-2 border-b-0' : 'justify-between border-b border-gray-800'}`}>
+        <div className={`p-4 flex items-center ${isSidebarCollapsed ? 'justify-center px-2 border-b-0' : 'justify-between border-b border-neutral-800/80'}`}>
           {!isSidebarCollapsed && (
-            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent truncate">
+            <h1 className="text-xl font-extrabold bg-gradient-to-r from-cyan-400 via-purple-400 to-fuchsia-500 bg-clip-text text-transparent truncate drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">
               Nebula
             </h1>
           )}
@@ -612,7 +649,7 @@ export default function ChatInterface() {
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed(prev => !prev)}
-              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer hidden md:block"
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer hidden md:block"
               title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {isSidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
@@ -620,7 +657,7 @@ export default function ChatInterface() {
             <button
               type="button"
               onClick={() => setIsMobileSidebarOpen(false)}
-              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer md:hidden"
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer md:hidden"
               title="Close sidebar"
             >
               <X size={20} />
@@ -638,7 +675,7 @@ export default function ChatInterface() {
                   setIsMobileSidebarOpen(false);
                   navigate('/');
                 }}
-                className="p-2.5 text-gray-400 hover:text-white hover:bg-gray-800/80 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+                className="p-2.5 text-gray-400 hover:text-white hover:bg-neutral-800 border border-transparent hover:border-cyan-500/60 rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center hover:shadow-[0_0_12px_rgba(6,182,212,0.4)]"
                 title="New Chat"
               >
                 <Plus size={20} />
@@ -651,16 +688,16 @@ export default function ChatInterface() {
                 setIsMobileSidebarOpen(false);
                 navigate('/');
               }}
-              className="w-full text-left px-4 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 cursor-pointer mb-1"
+              className="w-full text-left px-4 py-2.5 bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 hover:border-cyan-500/60 rounded-xl transition-all duration-200 text-sm font-medium flex items-center gap-2 cursor-pointer mb-1 hover:shadow-[0_0_14px_rgba(6,182,212,0.4)]"
             >
-              <Plus size={18} />
+              <Plus size={18} className="text-cyan-400" />
               <span>New Chat</span>
             </button>
           )}
 
           {/* Usage Meter Card - Hidden when collapsed */}
           {!isSidebarCollapsed && (
-            <div className="p-3.5 my-3 bg-gray-800/80 border border-gray-700/80 rounded-xl space-y-2.5">
+            <div className="p-3.5 my-3 bg-neutral-900/80 border border-neutral-800 rounded-xl space-y-2.5 shadow-inner">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-400 font-medium flex items-center gap-1">
                   <Zap size={13} className="text-yellow-400" /> Token Budget
@@ -676,10 +713,10 @@ export default function ChatInterface() {
               <div className="text-xs font-semibold text-white font-mono">
                 {userUsage.used.toLocaleString()} / {userUsage.budget.toLocaleString()} tokens used today
               </div>
-              <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all duration-300 ${
-                    userUsage.used >= userUsage.budget ? 'bg-red-500' : 'bg-blue-500'
+                    userUsage.used >= userUsage.budget ? 'bg-red-500' : 'bg-cyan-500'
                   }`}
                   style={{ width: `${Math.min(100, (userUsage.used / userUsage.budget) * 100)}%` }}
                 />
@@ -695,7 +732,7 @@ export default function ChatInterface() {
           )}
 
           {/* Subtle Horizontal Divider - Hidden when collapsed */}
-          {!isSidebarCollapsed && <div className="border-t border-gray-800/60 my-4" />}
+          {!isSidebarCollapsed && <div className="border-t border-neutral-800/80 my-4" />}
 
           {/* Past Conversations Section */}
           {isSidebarCollapsed ? (
@@ -703,7 +740,7 @@ export default function ChatInterface() {
               <button
                 type="button"
                 onClick={() => setIsSidebarCollapsed(false)}
-                className="p-2.5 text-gray-400 hover:text-white hover:bg-gray-800/80 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+                className="p-2.5 text-gray-400 hover:text-white hover:bg-neutral-800 border border-transparent hover:border-purple-500/40 rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center hover:shadow-[0_0_12px_rgba(168,85,247,0.4)]"
                 title="Past Conversations"
               >
                 <MessageSquare size={20} />
@@ -717,21 +754,25 @@ export default function ChatInterface() {
               <div className="space-y-1">
                 {isLoadingHistory ? (
                   <div className="flex items-center gap-2 text-xs text-gray-400 px-2 py-2 italic">
-                    <RefreshCw size={12} className="animate-spin text-blue-400 shrink-0" />
+                    <RefreshCw size={12} className="animate-spin text-cyan-400 shrink-0" />
                     <span>Loading chats...</span>
                   </div>
                 ) : historyError ? (
-                  <div className="p-2.5 bg-red-950/40 border border-red-900/60 rounded-lg space-y-2">
-                    <div className="text-xs text-red-400 font-medium">{historyError}</div>
-                    <button
-                      type="button"
-                      onClick={fetchChatHistory}
-                      className="flex items-center gap-1.5 text-[11px] font-medium text-red-300 hover:text-white bg-red-900/60 hover:bg-red-800 px-2 py-1 rounded transition-colors cursor-pointer"
-                    >
-                      <RefreshCw size={11} />
-                      <span>Retry</span>
-                    </button>
-                  </div>
+                  <InlineAlert
+                    severity="error"
+                    action={
+                      <button
+                        type="button"
+                        onClick={fetchChatHistory}
+                        className="flex items-center gap-1.5 text-[11px] font-medium text-red-300 hover:text-white bg-red-900/60 hover:bg-red-800 px-2 py-1 rounded transition-colors duration-200 cursor-pointer"
+                      >
+                        <RefreshCw size={11} />
+                        <span>Retry</span>
+                      </button>
+                    }
+                  >
+                    {historyError}
+                  </InlineAlert>
                 ) : chatHistory.length === 0 ? (
                   <div className="text-xs text-gray-500 italic px-2 py-1">No past chats yet</div>
                 ) : (
@@ -742,13 +783,13 @@ export default function ChatInterface() {
                         setIsMobileSidebarOpen(false);
                         navigate(`/chat/${chat._id}`);
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-lg transition-colors text-sm truncate flex items-center gap-2 cursor-pointer ${
+                      className={`w-full text-left px-3 py-2 rounded-xl transition-all duration-200 text-sm truncate flex items-center gap-2 cursor-pointer ${
                         chatId === chat._id
-                          ? 'bg-gray-800 text-white font-medium border-l-2 border-blue-500'
-                          : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
+                          ? 'bg-neutral-900 text-white font-medium border-l-2 border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                          : 'text-gray-400 hover:bg-neutral-900/80 hover:text-gray-200 hover:shadow-[0_0_12px_rgba(168,85,247,0.35)] hover:border hover:border-purple-500/30'
                       }`}
                     >
-                      <MessageSquare size={14} className="shrink-0" />
+                      <MessageSquare size={14} className="shrink-0 text-gray-400" />
                       <span className="truncate">{chat.title || `Chat ${chat._id.slice(-4)}`}</span>
                     </button>
                   ))
@@ -759,11 +800,11 @@ export default function ChatInterface() {
         </div>
 
         {/* User Profile Section */}
-        <div className={`p-3.5 flex ${isSidebarCollapsed ? 'flex-col items-center gap-3 justify-center border-t-0' : 'items-center justify-between border-t border-gray-800'}`}>
+        <div className={`p-3.5 flex ${isSidebarCollapsed ? 'flex-col items-center gap-3 justify-center border-t-0' : 'items-center justify-between border-t border-neutral-800/80'}`}>
           {isSidebarCollapsed ? (
             <>
               <div
-                className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold shrink-0 cursor-default"
+                className="w-8 h-8 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 flex items-center justify-center text-sm font-bold shrink-0 cursor-default shadow-[0_0_10px_rgba(6,182,212,0.4)]"
                 title={user?.name || 'User Profile'}
               >
                 {user?.name?.charAt(0).toUpperCase()}
@@ -771,7 +812,7 @@ export default function ChatInterface() {
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
-                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 text-gray-400 hover:text-purple-400 hover:bg-purple-950/40 border border-transparent hover:border-purple-500/40 rounded-lg transition-all duration-200 cursor-pointer hover:shadow-[0_0_12px_rgba(168,85,247,0.5)]"
                 title="Settings"
               >
                 <SettingsIcon size={18} />
@@ -779,7 +820,7 @@ export default function ChatInterface() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 text-gray-400 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-500/40 rounded-lg transition-all duration-200 cursor-pointer hover:shadow-[0_0_12px_rgba(244,63,94,0.5)]"
                 title="Logout"
               >
                 <LogOut size={18} />
@@ -787,17 +828,17 @@ export default function ChatInterface() {
             </>
           ) : (
             <>
-              <div className="flex items-center gap-2 overflow-hidden">
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold shrink-0">
+              <div className="flex items-center gap-2 overflow-hidden group/profile cursor-default">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 flex items-center justify-center text-sm font-bold shrink-0 shadow-[0_0_10px_rgba(6,182,212,0.4)]">
                   {user?.name?.charAt(0).toUpperCase()}
                 </div>
-                <span className="text-sm font-medium truncate w-24">{user?.name}</span>
+                <span className="text-sm font-medium truncate w-24 text-gray-200">{user?.name}</span>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(true)}
-                  className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                  className="p-1.5 text-gray-400 hover:text-purple-400 hover:bg-purple-950/40 border border-transparent hover:border-purple-500/40 rounded-lg transition-all duration-200 cursor-pointer hover:shadow-[0_0_12px_rgba(168,85,247,0.5)]"
                   title="Settings"
                 >
                   <SettingsIcon size={18} />
@@ -805,7 +846,7 @@ export default function ChatInterface() {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                  className="p-1.5 text-gray-400 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-500/40 rounded-lg transition-all duration-200 cursor-pointer hover:shadow-[0_0_12px_rgba(244,63,94,0.5)]"
                   title="Logout"
                 >
                   <LogOut size={18} />
@@ -817,18 +858,28 @@ export default function ChatInterface() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-gray-950 relative overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col bg-deep-vignette relative overflow-hidden min-w-0">
+        {/* Persistent Glowing & Pulsing Neon Background Watermark Logo */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden select-none">
+          <div className="flex flex-row items-center justify-center gap-3 sm:gap-5 animate-neon-pulse transform -translate-y-6">
+            <Sparkles className="w-10 h-10 sm:w-16 sm:h-16 md:w-24 md:h-24 text-cyan-300 drop-shadow-[0_0_20px_rgba(6,182,212,0.9)] shrink-0" />
+            <span className="font-extrabold tracking-widest uppercase text-white neon-text-glow text-4xl sm:text-6xl md:text-7xl lg:text-8xl whitespace-nowrap">
+              NEBULA
+            </span>
+          </div>
+        </div>
+
         {/* Mobile Top Header Bar */}
-        <div className="flex items-center justify-between p-3 border-b border-gray-800/80 bg-gray-900/60 md:hidden relative z-20 shrink-0">
+        <div className="flex items-center justify-between p-3 border-b border-neutral-800/80 bg-black/80 md:hidden relative z-20 shrink-0 backdrop-blur-md">
           <button
             type="button"
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="p-2 text-gray-300 hover:text-white hover:bg-gray-800/80 rounded-lg transition-colors cursor-pointer"
+            className="p-2 text-gray-300 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
             title="Open sidebar"
           >
             <Menu size={20} />
           </button>
-          <h1 className="text-sm font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+          <h1 className="text-sm font-extrabold bg-gradient-to-r from-cyan-400 via-purple-400 to-fuchsia-500 bg-clip-text text-transparent">
             NEBULA
           </h1>
           <button
@@ -837,7 +888,7 @@ export default function ChatInterface() {
               setIsMobileSidebarOpen(false);
               navigate('/');
             }}
-            className="p-2 text-gray-300 hover:text-white hover:bg-gray-800/80 rounded-lg transition-colors cursor-pointer"
+            className="p-2 text-gray-300 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
             title="New Chat"
           >
             <Plus size={18} />
@@ -846,15 +897,40 @@ export default function ChatInterface() {
 
         {/* Messages */}
         <div className="relative z-10 flex-1 overflow-y-auto p-3 sm:p-6">
-          {messages.length === 0 ? (
-            <div className="relative h-full flex flex-col items-center justify-center text-center text-gray-400 space-y-4 overflow-hidden px-4">
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] max-w-[85vw] max-h-[85vw]">
-                  <Orb />
+          {isMessagesLoading ? (
+            <div className="space-y-6 max-w-4xl mx-auto p-4 animate-pulse">
+              <div className="flex gap-4 items-start">
+                <div className="w-8 h-8 rounded-full bg-purple-950/50 border border-purple-800/40 shrink-0 flex items-center justify-center">
+                  <Sparkles size={18} className="text-purple-400/50" />
+                </div>
+                <div className="space-y-2.5 flex-1 max-w-[75%] bg-neutral-900/40 border border-white/10 rounded-2xl rounded-bl-sm p-4 backdrop-blur-xs">
+                  <div className="h-3.5 bg-white/10 rounded-md w-3/4" />
+                  <div className="h-3.5 bg-white/10 rounded-md w-1/2" />
                 </div>
               </div>
-              <div className="relative z-10 flex flex-col items-center">
-                <h2 className="text-xl sm:text-2xl font-semibold text-gray-200">{randomGreeting}</h2>
+              <div className="flex gap-4 justify-end items-start">
+                <div className="space-y-2.5 flex-1 max-w-[65%] bg-cyan-600/20 border border-cyan-500/20 rounded-2xl rounded-br-sm p-4 backdrop-blur-xs flex flex-col items-end">
+                  <div className="h-3.5 bg-white/20 rounded-md w-full" />
+                  <div className="h-3.5 bg-white/20 rounded-md w-2/3" />
+                </div>
+                <div className="w-8 h-8 rounded-full bg-neutral-800 shrink-0" />
+              </div>
+              <div className="flex gap-4 items-start">
+                <div className="w-8 h-8 rounded-full bg-purple-950/50 border border-purple-800/40 shrink-0 flex items-center justify-center">
+                  <Sparkles size={18} className="text-purple-400/50" />
+                </div>
+                <div className="space-y-2.5 flex-1 max-w-[80%] bg-neutral-900/40 border border-white/10 rounded-2xl rounded-bl-sm p-4 backdrop-blur-xs">
+                  <div className="h-3.5 bg-white/10 rounded-md w-5/6" />
+                  <div className="h-3.5 bg-white/10 rounded-md w-2/3" />
+                  <div className="h-3.5 bg-white/10 rounded-md w-2/5" />
+                </div>
+              </div>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="relative h-full flex flex-col items-center justify-center text-center text-gray-400 space-y-4 overflow-hidden px-4 z-10">
+              <div className="relative z-10 flex flex-col items-center max-w-xl space-y-3">
+                <h2 className="text-xl sm:text-2xl font-semibold text-gray-200 drop-shadow-[0_0_12px_rgba(255,255,255,0.3)]">{randomGreeting}</h2>
+                <p className="text-xs sm:text-sm text-gray-400">Type your message below to begin</p>
               </div>
             </div>
           ) : (
@@ -868,15 +944,15 @@ export default function ChatInterface() {
 
                   <div className={`flex gap-4 max-w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     {msg.role === 'assistant' && (
-                      <div className="w-8 h-8 rounded-full bg-purple-950/80 border border-purple-800/60 flex items-center justify-center shrink-0">
-                        <Bot size={18} className="text-purple-400" />
+                      <div className="w-8 h-8 rounded-full bg-purple-950/80 border border-purple-800/60 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(168,85,247,0.4)]">
+                        <Sparkles size={18} className="text-purple-400" />
                       </div>
                     )}
 
                     {/* Message Bubble Container */}
                     {editingMessageId === msg._id ? (
                       /* Inline Edit Input */
-                      <div className="w-[480px] max-w-[85vw] bg-gray-900 border border-blue-500/50 rounded-xl p-3 shadow-md">
+                      <div className="w-[480px] max-w-[85vw] bg-black border border-cyan-500/60 shadow-[0_0_15px_rgba(6,182,212,0.3)] rounded-xl p-3">
                         <textarea
                           value={editText}
                           onChange={(e) => setEditText(e.target.value)}
@@ -890,14 +966,14 @@ export default function ChatInterface() {
                               setEditingMessageId(null);
                               setEditText('');
                             }}
-                            className="px-3 py-1 rounded-md text-xs font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 transition-colors cursor-pointer"
+                            className="px-3 py-1 rounded-md text-xs font-medium text-gray-300 bg-neutral-800 hover:bg-neutral-700 transition-colors duration-200 cursor-pointer"
                           >
                             Cancel
                           </button>
                           <button
                             type="button"
                             onClick={() => handleSaveEdit(msg._id, editText)}
-                            className="px-3 py-1 rounded-md text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors cursor-pointer"
+                            className="px-3 py-1 rounded-md text-xs font-medium text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 transition-colors duration-200 cursor-pointer"
                           >
                             Save
                           </button>
@@ -906,8 +982,8 @@ export default function ChatInterface() {
                     ) : (
                       /* Normal Message Bubble */
                       <div className={`group relative px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl max-w-[90%] sm:max-w-[80%] ${msg.role === 'user'
-                          ? 'bg-blue-600 text-white rounded-br-sm shadow-sm'
-                          : 'bg-white/5 backdrop-blur-md border border-white/10 text-gray-100 rounded-bl-sm'
+                          ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-br-sm shadow-[0_0_12px_rgba(6,182,212,0.35)]'
+                          : 'bg-neutral-900/60 backdrop-blur-xs border border-white/10 text-gray-100 rounded-bl-sm shadow-[0_0_15px_rgba(0,0,0,0.5)]'
                         }`}>
 
                         {/* Hover Edit Pencil Icon for User Messages */}
@@ -918,7 +994,7 @@ export default function ChatInterface() {
                               setEditingMessageId(msg._id);
                               setEditText(msg.content ? msg.content.split('\n\n[Attached file content]:')[0] : '');
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 p-1 text-white/80 hover:text-white bg-blue-700/60 hover:bg-blue-700 rounded-full cursor-pointer"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute top-2 right-2 p-1 text-white/80 hover:text-white bg-blue-700/60 hover:bg-blue-700 rounded-full cursor-pointer"
                             title="Edit message"
                           >
                             <Pencil size={12} />
@@ -927,12 +1003,12 @@ export default function ChatInterface() {
 
                         {/* Hover Actions for Assistant Messages: Regenerate & Copy */}
                         {msg.role === 'assistant' && (
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 flex items-center gap-1 z-10">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute top-2 right-2 flex items-center gap-1 z-10">
                             <button
                               type="button"
                               onClick={() => handleRegenerateResponse(idx)}
                               disabled={isLoading}
-                              className="p-1 text-gray-400 hover:text-white bg-gray-800/80 hover:bg-gray-800 rounded-full cursor-pointer disabled:opacity-50"
+                              className="p-1 text-gray-400 hover:text-white bg-neutral-800/80 hover:bg-neutral-800 rounded-full cursor-pointer disabled:opacity-50 transition-colors duration-200"
                               title="Regenerate response"
                             >
                               <RefreshCw size={12} className={isLoading ? "animate-spin" : ""} />
@@ -940,7 +1016,7 @@ export default function ChatInterface() {
                             <button
                               type="button"
                               onClick={() => handleCopyMessage(msg._id || idx, msg.content)}
-                              className="p-1 text-gray-400 hover:text-white bg-gray-800/80 hover:bg-gray-800 rounded-full cursor-pointer"
+                              className="p-1 text-gray-400 hover:text-white bg-neutral-800/80 hover:bg-neutral-800 rounded-full cursor-pointer transition-colors duration-200"
                               title={copiedMessageId === (msg._id || idx) ? "Copied!" : "Copy message"}
                             >
                               {copiedMessageId === (msg._id || idx) ? (
@@ -967,22 +1043,38 @@ export default function ChatInterface() {
                           </div>
                         )}
 
-                        <div className="prose prose-sm prose-invert max-w-none leading-relaxed text-sm sm:text-[15px]">
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                            {preprocessMathContent(msg.content ? msg.content.split('\n\n[Attached file content]:')[0] : '')}
-                          </ReactMarkdown>
-                        </div>
-
-                        {/* Render inline Upgrade button if restricted or limit reached */}
-                        {msg.isUpgradePrompt && userUsage.plan === 'free' && (
-                          <button
-                            type="button"
-                            onClick={handleTogglePlan}
-                            className="mt-3 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                        {msg.isError ? (
+                          <InlineAlert severity="error" title="Connection Error">
+                            {msg.content}
+                          </InlineAlert>
+                        ) : msg.isUpgradePrompt ? (
+                          <InlineAlert
+                            severity="warning"
+                            title="Tier Restricted / Limit Reached"
+                            action={
+                              userUsage.plan === 'free' && (
+                                <button
+                                  type="button"
+                                  onClick={handleTogglePlan}
+                                  className="mt-1 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-all duration-200 cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <Zap size={14} className="text-yellow-400" />
+                                  <span>Upgrade to Pro (Demo)</span>
+                                </button>
+                              )
+                            }
                           >
-                            <Zap size={14} className="text-yellow-400" />
-                            <span>Upgrade to Pro (Demo)</span>
-                          </button>
+                            {msg.content}
+                          </InlineAlert>
+                        ) : (
+                          <div className="prose prose-sm prose-invert max-w-none leading-relaxed text-sm sm:text-[15px]">
+                            <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                              {preprocessMathContent(msg.content ? msg.content.split('\n\n[Attached file content]:')[0] : '')}
+                            </ReactMarkdown>
+                            {msg._id === streamingMessageId && (
+                              <span className="inline-block w-0.5 h-4 ml-1 bg-cyan-400 align-middle animate-cursor-blink" aria-hidden="true" />
+                            )}
+                          </div>
                         )}
 
                         {/* Render Transparency Panel & System Pipeline Log */}
@@ -993,7 +1085,7 @@ export default function ChatInterface() {
                     )}
 
                     {msg.role === 'user' && (
-                      <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center shrink-0">
                         <UserIcon size={18} className="text-gray-300" />
                       </div>
                     )}
@@ -1004,14 +1096,14 @@ export default function ChatInterface() {
               {/* Status Indicator */}
               {statusMessage && (
                 <div className="flex gap-4 justify-start">
-                  <div className="w-8 h-8 rounded-full bg-purple-950/80 border border-purple-800/60 flex items-center justify-center shrink-0">
-                    <Bot size={18} className="text-purple-400" />
+                  <div className="w-8 h-8 rounded-full bg-purple-950/80 border border-purple-800/60 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(168,85,247,0.4)]">
+                    <Sparkles size={18} className="text-purple-400" />
                   </div>
-                  <div className="px-5 py-2 rounded-2xl bg-white/5 text-gray-300 rounded-bl-sm border border-white/10 backdrop-blur-xl flex items-center gap-3">
+                  <div className="px-5 py-2 rounded-2xl bg-neutral-900/80 text-gray-300 rounded-bl-sm border border-neutral-800 backdrop-blur-md flex items-center gap-3">
                     <div className="flex items-center gap-1">
-                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                      <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce"></div>
+                      <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                     </div>
                     <span className="text-xs italic">{statusMessage}</span>
                   </div>
@@ -1029,13 +1121,13 @@ export default function ChatInterface() {
             {/* Attached File Preview Tag */}
             {attachedFile && (
               <div className="mb-2.5 flex justify-start">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-950/80 border border-blue-800 text-blue-300 rounded-lg text-xs font-medium shadow-xs">
-                  <Paperclip size={14} className="text-blue-400 shrink-0" />
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-cyan-950/80 border border-cyan-800 text-cyan-300 rounded-lg text-xs font-medium shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+                  <Paperclip size={14} className="text-cyan-400 shrink-0" />
                   <span className="truncate max-w-[200px]">{attachedFile.name}</span>
                   <button
                     type="button"
                     onClick={() => setAttachedFile(null)}
-                    className="text-blue-400 hover:text-red-400 transition-colors ml-1 cursor-pointer"
+                    className="text-cyan-400 hover:text-red-400 transition-colors ml-1 cursor-pointer"
                     title="Remove file"
                   >
                     <X size={14} />
@@ -1044,27 +1136,27 @@ export default function ChatInterface() {
               </div>
             )}
 
-            {/* Single Centered Pill-Shaped Container */}
-            <form onSubmit={sendMessage} className="relative flex items-center bg-white/5 backdrop-blur-md border border-white/20 rounded-full px-3 sm:px-4 py-2 sm:py-3 shadow-lg gap-2">
+            {/* Single Centered Pill-Shaped Container with Glowing Neon Treatment */}
+            <form onSubmit={sendMessage} className="relative flex items-center bg-black/85 backdrop-blur-md border border-cyan-500/50 hover:border-purple-500/70 focus-within:border-cyan-400 neon-input-pill rounded-full px-3 sm:px-4 py-2 sm:py-3 transition-all duration-300 gap-2">
 
               {/* Plus Button & Popup Menu */}
               <div className="relative shrink-0" ref={menuRef}>
                 <button
                   type="button"
                   onClick={() => setShowPlusMenu(!showPlusMenu)}
-                  className="p-2 text-gray-400 hover:text-blue-400 hover:bg-gray-800/80 rounded-full transition-colors flex items-center justify-center cursor-pointer"
+                  className="p-2 text-gray-400 hover:text-cyan-400 hover:bg-neutral-800/80 rounded-full transition-colors flex items-center justify-center cursor-pointer"
                   title="Attach File"
                 >
-                  <Plus size={20} className={`transition-transform ${showPlusMenu ? 'rotate-45 text-blue-400' : ''}`} />
+                  <Plus size={20} className={`transition-transform ${showPlusMenu ? 'rotate-45 text-cyan-400' : ''}`} />
                 </button>
 
                 {/* Popup Menu ABOVE the button */}
                 {showPlusMenu && (
-                  <div className="absolute bottom-full left-0 mb-3 bg-gray-900 rounded-xl shadow-xl border border-gray-800 py-1.5 z-30 min-w-[150px] animate-fadeIn">
+                  <div className="absolute bottom-full left-0 mb-3 bg-neutral-950 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.8)] border border-neutral-800 py-1.5 z-30 min-w-[150px] animate-fadeIn">
                     <button
                       type="button"
                       onClick={() => imageInputRef.current?.click()}
-                      className="w-full text-left px-3.5 py-2 hover:bg-gray-800 text-gray-300 hover:text-white text-xs font-medium flex items-center gap-2.5 transition-colors cursor-pointer"
+                      className="w-full text-left px-3.5 py-2 hover:bg-neutral-800 text-gray-300 hover:text-white text-xs font-medium flex items-center gap-2.5 transition-colors cursor-pointer"
                     >
                       <ImageIcon size={16} className="text-purple-400" />
                       <span>Upload Image</span>
@@ -1072,9 +1164,9 @@ export default function ChatInterface() {
                     <button
                       type="button"
                       onClick={() => documentInputRef.current?.click()}
-                      className="w-full text-left px-3.5 py-2 hover:bg-gray-800 text-gray-300 hover:text-white text-xs font-medium flex items-center gap-2.5 transition-colors cursor-pointer"
+                      className="w-full text-left px-3.5 py-2 hover:bg-neutral-800 text-gray-300 hover:text-white text-xs font-medium flex items-center gap-2.5 transition-colors cursor-pointer"
                     >
-                      <FileText size={16} className="text-blue-400" />
+                      <FileText size={16} className="text-cyan-400" />
                       <span>Upload File</span>
                     </button>
                   </div>
@@ -1096,49 +1188,47 @@ export default function ChatInterface() {
                 <button
                   type="button"
                   onClick={() => setShowTierMenu(!showTierMenu)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900/80 hover:bg-gray-800/90 text-gray-300 hover:text-white border border-gray-700/60 rounded-full text-xs font-medium transition-colors cursor-pointer"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 bg-neutral-900/90 hover:bg-neutral-800 text-gray-300 hover:text-white border border-neutral-700/60 rounded-full text-xs font-medium transition-all duration-200 cursor-pointer ${
+                    tierAnim ? 'scale-105 ring-2 ring-purple-500/50' : ''
+                  }`}
                   title="Select Model Tier"
                 >
                   <span className={`capitalize font-medium ${
-                    selectedTier === 'pro' ? 'text-indigo-400' : selectedTier === 'standard' ? 'text-purple-400' : 'text-blue-400'
+                    selectedTier === 'pro' ? 'text-indigo-400' : selectedTier === 'standard' ? 'text-purple-400' : 'text-cyan-400'
                   }`}>
                     {selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}
                   </span>
-                  <ChevronDown size={14} className={`text-gray-400 transition-transform ${showTierMenu ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${showTierMenu ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Dropdown Menu */}
                 {showTierMenu && (
-                  <div className="absolute bottom-full right-0 mb-3 bg-gray-900 rounded-xl shadow-xl border border-gray-800 py-1.5 z-30 min-w-[130px] animate-fadeIn">
-                    <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-800 mb-1">
+                  <div className="absolute bottom-full right-0 mb-3 bg-neutral-950 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.8)] border border-neutral-800 py-1.5 z-30 min-w-[130px] animate-fadeIn">
+                    <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-b border-neutral-800 mb-1">
                       Model Tier
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedTier('lite');
-                        setShowTierMenu(false);
-                      }}
-                      className={`w-full text-left px-3 py-1.5 hover:bg-gray-800 text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                        selectedTier === 'lite' ? 'text-blue-400 font-semibold bg-gray-800/50' : 'text-gray-300'
+                      onClick={() => handleSelectTier('lite')}
+                      className={`w-full text-left px-3 py-1.5 hover:bg-neutral-800 text-xs font-medium flex items-center justify-between transition-colors duration-200 cursor-pointer ${
+                        selectedTier === 'lite' ? 'text-cyan-400 font-semibold bg-neutral-800/50' : 'text-gray-300'
                       }`}
                     >
                       <span>Lite</span>
-                      {selectedTier === 'lite' && <Check size={12} className="text-blue-400" />}
+                      {selectedTier === 'lite' && <Check size={12} className="text-cyan-400" />}
                     </button>
                     <button
                       type="button"
                       disabled={userUsage.plan === 'free'}
                       onClick={() => {
                         if (userUsage.plan === 'free') return;
-                        setSelectedTier('standard');
-                        setShowTierMenu(false);
+                        handleSelectTier('standard');
                       }}
                       title={userUsage.plan === 'free' ? 'Upgrade to Pro to unlock' : 'Standard Tier'}
-                      className={`w-full text-left px-3 py-1.5 text-xs font-medium flex items-center justify-between transition-colors ${
+                      className={`w-full text-left px-3 py-1.5 text-xs font-medium flex items-center justify-between transition-colors duration-200 ${
                         userUsage.plan === 'free'
                           ? 'opacity-50 cursor-not-allowed text-gray-500'
-                          : selectedTier === 'standard' ? 'text-purple-400 font-semibold bg-gray-800/50 cursor-pointer hover:bg-gray-800' : 'text-gray-300 cursor-pointer hover:bg-gray-800'
+                          : selectedTier === 'standard' ? 'text-purple-400 font-semibold bg-neutral-800/50 cursor-pointer hover:bg-neutral-800' : 'text-gray-300 cursor-pointer hover:bg-neutral-800'
                       }`}
                     >
                       <span className="flex items-center gap-1.5">
@@ -1152,14 +1242,13 @@ export default function ChatInterface() {
                       disabled={userUsage.plan === 'free'}
                       onClick={() => {
                         if (userUsage.plan === 'free') return;
-                        setSelectedTier('pro');
-                        setShowTierMenu(false);
+                        handleSelectTier('pro');
                       }}
                       title={userUsage.plan === 'free' ? 'Upgrade to Pro to unlock' : 'Pro Tier'}
-                      className={`w-full text-left px-3 py-1.5 text-xs font-medium flex items-center justify-between transition-colors ${
+                      className={`w-full text-left px-3 py-1.5 text-xs font-medium flex items-center justify-between transition-colors duration-200 ${
                         userUsage.plan === 'free'
                           ? 'opacity-50 cursor-not-allowed text-gray-500'
-                          : selectedTier === 'pro' ? 'text-indigo-400 font-semibold bg-gray-800/50 cursor-pointer hover:bg-gray-800' : 'text-gray-300 cursor-pointer hover:bg-gray-800'
+                          : selectedTier === 'pro' ? 'text-indigo-400 font-semibold bg-neutral-800/50 cursor-pointer hover:bg-neutral-800' : 'text-gray-300 cursor-pointer hover:bg-neutral-800'
                       }`}
                     >
                       <span className="flex items-center gap-1.5">
@@ -1176,7 +1265,7 @@ export default function ChatInterface() {
               <button
                 type="submit"
                 disabled={(!input.trim() && !attachedFile) || isLoading}
-                className="p-2.5 rounded-full bg-blue-600 text-white disabled:bg-gray-800 disabled:text-gray-600 hover:bg-blue-700 transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                className="p-2.5 rounded-full bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white disabled:bg-neutral-800 disabled:text-neutral-600 shadow-[0_0_12px_rgba(6,182,212,0.5)] transition-all duration-200 flex items-center justify-center cursor-pointer shrink-0"
               >
                 <Send size={18} />
               </button>

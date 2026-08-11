@@ -13,7 +13,7 @@ export default function TransparencyPanel({ msg }) {
     <div className="mt-3 pt-2 border-t border-gray-200/80">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-700 font-medium transition-colors cursor-pointer py-1"
+        className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-700 font-medium transition-colors duration-200 cursor-pointer py-1"
       >
         <Cpu size={14} />
         <span>Reasoning & Transparency Log</span>

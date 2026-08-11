@@ -41,3 +41,75 @@ input:-webkit-autofill:focus {
 .prose code {
   background-color: transparent !important;
 }
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-cursor-blink {
+  animation: cursorBlink 1s infinite;
+}
+
+/* Ambient Deep Space Vignette Background */
+.bg-deep-vignette {
+  background: radial-gradient(ellipse at center, #0d0d1f 0%, #030308 55%, #000000 100%);
+}
+
+/* Multi-layered Genuine Neon Text Glow */
+.neon-text-glow {
+  text-shadow:
+    0 0 7px rgba(255, 255, 255, 0.95),
+    0 0 14px rgba(6, 182, 212, 0.9),
+    0 0 28px rgba(168, 85, 247, 0.8),
+    0 0 56px rgba(168, 85, 247, 0.6),
+    0 0 90px rgba(168, 85, 247, 0.35);
+}
+
+/* Breathing Neon Sign Pulsing Animation */
+@keyframes neonPulse {
+  0%, 100% {
+    opacity: 0.30;
+    filter: drop-shadow(0 0 15px rgba(6, 182, 212, 0.7)) drop-shadow(0 0 35px rgba(168, 85, 247, 0.6));
+  }
+  50% {
+    opacity: 0.18;
+    filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.4)) drop-shadow(0 0 18px rgba(168, 85, 247, 0.3));
+  }
+}
+
+.animate-neon-pulse {
+  animation: neonPulse 5s ease-in-out infinite;
+}
+
+/* Multi-layered Neon Box-Shadow Input Glow */
+.neon-input-pill {
+  box-shadow:
+    0 0 12px rgba(6, 182, 212, 0.35),
+    0 0 25px rgba(168, 85, 247, 0.25);
+}
+
+.neon-input-pill:focus-within {
+  box-shadow:
+    0 0 18px rgba(6, 182, 212, 0.55),
+    0 0 35px rgba(168, 85, 247, 0.4);
+}
+
+/* Layered Neon Hover Glow Utilities */
+.neon-glow-cyan:hover {
+  box-shadow:
+    0 0 12px rgba(6, 182, 212, 0.5),
+    0 0 22px rgba(6, 182, 212, 0.25);
+}
+
+.neon-glow-purple:hover {
+  box-shadow:
+    0 0 12px rgba(168, 85, 247, 0.5),
+    0 0 22px rgba(168, 85, 247, 0.25);
+}
+
+.neon-glow-rose:hover {
+  box-shadow:
+    0 0 12px rgba(244, 63, 94, 0.5),
+    0 0 22px rgba(244, 63, 94, 0.25);
+}

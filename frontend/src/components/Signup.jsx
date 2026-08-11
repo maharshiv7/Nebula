@@ -5,6 +5,7 @@ import { GoogleLogin } from '@react-oauth/google';
 import Galaxy from './effects/Galaxy';
 import { apiFetch } from '../utils/api';
 import { API_URL } from '../utils/config';
+import InlineAlert from './InlineAlert';
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -84,7 +85,7 @@ export default function Signup() {
         />
       </div>
       <div className="relative z-10 flex items-center justify-center min-h-screen py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-6 bg-white/10 backdrop-blur-xl border border-white/20 p-6 sm:p-10 rounded-xl shadow-lg">
+        <div className="max-w-md w-full space-y-6 bg-white/10 backdrop-blur-xl border border-white/20 p-6 sm:p-10 rounded-2xl shadow-xl">
           {recoveryCodes.length > 0 ? (
             <div className="space-y-5">
               <div>
@@ -96,7 +97,7 @@ export default function Signup() {
                 </h2>
               </div>
 
-              <div className="p-3.5 bg-amber-950/70 border border-amber-800/80 rounded-lg space-y-2">
+              <div className="p-3.5 bg-amber-950/70 border border-amber-800/80 rounded-xl space-y-2">
                 <div className="flex items-start gap-2.5">
                   <ShieldAlert className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-200 leading-relaxed font-medium">
@@ -105,9 +106,9 @@ export default function Signup() {
                 </div>
               </div>
 
-              <div className="bg-black/60 border border-white/10 rounded-lg p-3 grid grid-cols-2 gap-2 font-mono text-center text-sm font-semibold text-green-400">
+              <div className="bg-black/60 border border-white/10 rounded-xl p-3 grid grid-cols-2 gap-2 font-mono text-center text-sm font-semibold text-green-400">
                 {recoveryCodes.map((code, idx) => (
-                  <div key={idx} className="bg-white/5 py-1.5 px-2 rounded border border-white/5 tracking-wider select-all">
+                  <div key={idx} className="bg-white/5 py-1.5 px-2 rounded-lg border border-white/5 tracking-wider select-all">
                     {code}
                   </div>
                 ))}
@@ -117,7 +118,7 @@ export default function Signup() {
                 <button
                   type="button"
                   onClick={handleCopyCodes}
-                  className="flex-1 py-2.5 px-3 border border-white/20 text-xs font-semibold rounded-md text-white bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  className="flex-1 py-2.5 px-3 border border-white/20 text-xs font-semibold rounded-xl text-white bg-white/10 hover:bg-white/20 transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {isCopied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4 text-gray-300" />}
                   <span>{isCopied ? 'Copied to Clipboard!' : 'Copy All Codes'}</span>
@@ -127,7 +128,7 @@ export default function Signup() {
               <button
                 type="button"
                 onClick={() => navigate('/login')}
-                className="w-full py-2.5 px-4 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors cursor-pointer"
+                className="w-full py-2.5 px-4 text-sm font-medium rounded-xl text-white bg-green-600 hover:bg-green-700 transition-colors duration-200 cursor-pointer"
               >
                 I've saved these
               </button>
@@ -165,7 +166,7 @@ export default function Signup() {
 
               <form className="mt-4 space-y-6" onSubmit={handleSignup} autoComplete="off">
                 <input type="password" style={{ display: 'none' }} autoComplete="new-password" tabIndex={-1} />
-                {error && <div className="text-red-400 text-sm text-center bg-red-950/60 border border-red-900/80 p-2.5 rounded-lg">{error}</div>}
+                {error && <InlineAlert severity="error">{error}</InlineAlert>}
                 <div className="rounded-md shadow-sm -space-y-px">
                   <div>
                     <input
