@@ -10,13 +10,11 @@ import InlineAlert from './InlineAlert';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [authMode, setAuthMode] = useState('password'); // 'password' | 'otp' | 'forgot'
+  const [authMode, setAuthMode] = useState('password'); // 'password' | 'forgot'
   const [forgotSubMode, setForgotSubMode] = useState('email'); // 'email' | 'code'
   const [recoveryCode, setRecoveryCode] = useState('');
   const [newRecoveryPassword, setNewRecoveryPassword] = useState('');
   const [confirmRecoveryPassword, setConfirmRecoveryPassword] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -61,62 +59,6 @@ export default function Login() {
       window.location.href = '/';
     } catch (err) {
       setError(err.message || 'Login failed');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSendOtp = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-
-    if (!email || !email.trim()) {
-      setError('Please enter your email address');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const res = await apiFetch(`${API_URL}/api/auth/send-otp`, {
-        method: 'POST',
-        body: JSON.stringify({ email })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to send OTP code');
-      setMessage(data.message || 'If an account exists for this email, a login code has been sent.');
-      setOtpSent(true);
-    } catch (err) {
-      setError(err.message || 'Failed to send OTP code');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-
-    if (!otpCode || !otpCode.trim()) {
-      setError('Please enter the 6-digit verification code');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const res = await apiFetch(`${API_URL}/api/auth/verify-otp`, {
-        method: 'POST',
-        body: JSON.stringify({ email, code: otpCode })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Verification failed');
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      window.location.href = '/';
-    } catch (err) {
-      setError(err.message || 'Verification failed');
     } finally {
       setIsLoading(false);
     }
@@ -218,7 +160,6 @@ export default function Login() {
             </div>
             <h2 className="mt-4 text-center text-2xl sm:text-3xl font-extrabold text-white">
               {authMode === 'password' && 'Sign in to Nebula'}
-              {authMode === 'otp' && 'Login with One-Time Code'}
               {authMode === 'forgot' && 'Reset Your Password'}
             </h2>
           </div>
@@ -306,106 +247,10 @@ export default function Login() {
                 </button>
               </div>
 
-              <div className="pt-2 text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError('');
-                    setMessage('');
-                    setOtpSent(false);
-                    setAuthMode('otp');
-                  }}
-                  className="text-xs text-purple-400 hover:text-purple-300 font-medium inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <Mail size={14} />
-                  <span>Login with a code instead</span>
-                </button>
-              </div>
-
               <div className="text-center text-sm text-gray-300 pt-2 border-t border-white/10">
                 Don't have an account? <Link to="/signup" className="text-blue-400 hover:text-blue-300 font-semibold">Sign up</Link>
               </div>
             </form>
-          )}
-
-          {/* MODE 2: OTP Passwordless Login */}
-          {authMode === 'otp' && (
-            <div className="mt-4 space-y-4">
-              {!otpSent ? (
-                <form onSubmit={handleSendOtp} className="space-y-4" autoComplete="off">
-                  <input type="password" style={{ display: 'none' }} autoComplete="new-password" tabIndex={-1} />
-                  <p className="text-xs text-gray-300 text-center">
-                    Enter your email to receive a 6-digit login code.
-                  </p>
-                  <div>
-                    <input
-                      type="email"
-                      name="email-nofill"
-                      autoComplete="off"
-                      required
-                      className="appearance-none relative block w-full px-3 py-2.5 border border-white/20 bg-white/5 placeholder-white/50 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-sm"
-                      placeholder="Email address"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full py-2.5 text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 transition-colors cursor-pointer"
-                  >
-                    {isLoading ? 'Sending Code...' : 'Send Code'}
-                  </button>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyOtp} className="space-y-4" autoComplete="off">
-                  <input type="password" style={{ display: 'none' }} autoComplete="new-password" tabIndex={-1} />
-                  <div>
-                    <label className="text-xs text-gray-300 mb-1 block">Enter 6-Digit Code</label>
-                    <input
-                      type="text"
-                      name="code-nofill"
-                      autoComplete="off"
-                      required
-                      maxLength={6}
-                      className="appearance-none relative block w-full px-3 py-2.5 border border-white/20 bg-white/5 placeholder-white/50 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-center font-mono text-lg tracking-widest"
-                      placeholder="123456"
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value)}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full py-2.5 text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 transition-colors cursor-pointer"
-                  >
-                    {isLoading ? 'Verifying...' : 'Verify & Login'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOtpSent(false)}
-                    className="w-full text-xs text-gray-400 hover:text-white cursor-pointer"
-                  >
-                    Resend code to a different email
-                  </button>
-                </form>
-              )}
-
-              <div className="pt-2 text-center border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError('');
-                    setMessage('');
-                    setAuthMode('password');
-                  }}
-                  className="text-xs text-blue-400 hover:text-blue-300 font-medium inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <ArrowLeft size={14} />
-                  <span>Back to password login</span>
-                </button>
-              </div>
-            </div>
           )}
 
           {/* MODE 3: Forgot Password & Recovery */}
